@@ -1,0 +1,402 @@
+---
+title: 'Linear Regression'
+author: 'alessio619'
+date: '`r Sys.Date()`'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+library(fs)
+#dir_ls() vs list.files()
+#dir_ls(recurse = 2, type = 'directory')
+#file_show()
+
+library(data.table)
+library(ISLR2)
+library(ggplot2)
+library(gridExtra)
+
+theme_set(theme_minimal())
+
+```
+
+> Residuals Gaussian Distribution is more a destination arrival than a departure point
+
+# Why so simple?
+
+Whenever we have a **Quantitative** problem, there is one method we can not avoid: **Linear Regression**. It is the foundation for many other tools, but it's importance goes far beyond that.
+
+In practice it has several properties and predictive power that suggests that running a regression may be both a good *Jumping-off* point and deliverable product. On one hand, as it is the foundation stone, we can approach our problem and begin questioning data and knowing it with "boring" classical statistical methods and it will yield two important things:  
+- **Insights** about the data, which is useful for *model selection*.  
+- **Roadmap** to build an *appropriate linear regression model*.  
+
+In other words, by following the "Good Old Linear Regression Recipe" we will be able to either have our model ready, or collected enough information about the data to chose the correct model. Not that bad for the Oldie. 
+
+## Interrogation Routine
+
+> If you torture your data enough, it will confess what you want to hear
+
+In most real-life cases, data will not speak at loud. But just asking questions is not enough, asking the right ones is far more useful than asking a plethora. A flexible routine may be:  
+
+1. *Is there a relationship between $X_1$ and $Y$?* 
+2. *How strong is the relationship between $X_1$ and $Y$?*  
+3. *Which $X_s$ are associated with $Y$?*  
+4. *How large is the association between each $X_s$ and $Y$?*  
+5. *How accurately can we predict $Y$?*  
+6. *Is the relationship linear?*  
+7. *Is there* **synergy** *among $X_s$'s?*  
+
+## Generalities  
+
+> **The formula:**  
+$$
+Y = \beta_0 + \beta_1 X
+$$
+
+Where the coefficients or parameters represent:  
+- $\beta_0$ is the *intercept*  
+- $\beta_1$ is the *slope*  
+
+-> In reality are **unknown**, so we denote the *Estimated* parameters with $^$.
+
+A very important component are *Residuals*, denoted as the difference between the **observed value and the estimated value:  
+
+$$
+\hat{y}_i = \hat{\beta}_0 + \hat{\beta}_1 X \\
+e_i = y_i - \hat{y}_i
+$$
+
+For demostration we load the `Advertising` dataset:  
+
+```{r load Advertising}
+
+Advertising <- fread(file = file.path('data', 'Advertising.csv'))
+
+head(Advertising)
+str(Advertising)
+summary(Advertising)
+
+```
+
+Then we fit a simple model regressing `sales` on `TV` and calculate the residuals:  
+
+```{r lm model Ad}
+
+model_tv <- lm(sales ~ TV, data = Advertising)
+
+df_model_tv = Advertising
+
+df_model_tv[, predicted_sales := predict(model_tv)]
+df_model_tv[, residuals_hand := sales - predicted_sales]
+df_model_tv[, residuals_model := model_tv$residuals]
+
+```
+
+Now that we have our model and its residuals we can plot them:  
+
+```{r lm fit graph Ad}
+
+ggplot(df_model_tv, 
+       aes(x = TV,
+           y = sales)) + 
+  geom_point(col = "#7D6B7D", alpha = 0.5, size = 3) +
+  geom_segment(aes(xend = TV, yend = predicted_sales), alpha = 0.1, size = 1) +
+      stat_smooth(method = "lm", col = "#FF665A") 
+
+```
+
+From the graph we can observe geometrically that:  
+- *Observed value* = $y_i$ are the circular points 
+- *Predicted (fitted, estimated)* = $\hat{y}_i$ are the points lying on the red line
+- *Residuals* = $e_i$ are the segments magnitude, calculated from the red line to the circular point  
+
+### Estimation stuff  
+
+The *Residual Sum of Squares* is a measurement of model (in)accuracy, written as:  
+$$
+RSS = (e_{1}^2 + e_{2}^2 + e_{3}^2 + ... + e_{n}^2)
+$$
+For instance, the **ordinary least squares** method minimizes the $RSS$ to find the best model, which can be proved that it is unbiased (does not systematically under/over estimate values).  
+
+The moment's in a nutshell are:  
+- $\hat{\mu}$ is an accurate estimate of the population mean but,
+- The *Standard Error (SE)* tell us that $Var(\hat{\mu}) = SE(\hat{\mu})^2 = \frac{\sigma^2}{n})$ , which means how far our mean is from the population mean. And...
+- We see that $\sigma^2$. is the deviation or **variance** of all realizations $y_i$ of $Y$.  
+
+To assess the model accuracy we look at two related quantitaties: 
+#### RSE: Residual Standard Error 
+- *RSE* roughly speaking is the average amount that the response will deviate from the true regression line. It is an estimate of the *standard deviation* of $\epsilon$ 
+- $RSE = \sqrt{\frac{1}{n-2}RSS}$  
+- It provides an absolute measure of lack of fit of the model in the same unit of measure of $Y$
+
+#### $R^2$ 
+- This one provides an alternative measure in form of *proportion*. The **proportion of variability in $Y$ that can be explained with $X$** that is explained by the model.  
+- $R^2 = 1 - \frac{RSS}{TSS}$ where
+     - $TSS = \sum{(y_i - \overline{y})^2}$ (the mean) 
+     - $RSS = \sum{(y_i - \hat{y})^2}$ (the estimated value) 
+     - It is a measure of **linear** relationship (when $X_i ; i = 1$, then $R^2 = correlation$)
+     
+### The case for Multiple Linear Regression     
+
+When running a regression with multiple variables there are other questions to ask:  
+1. Is at least one of the predictors in $X$ useful in predicting $Y$?  
+     - We use the *F-statistic = \frac{(TSS - RSS)/p}{RSS/(n-p-1)}*. If *F* is close to 1 there is no relationship 
+2. Do all predictors (or a subset of them) help to explain $Y$?  
+     - There are several ways to address this question, depending on the data and the model usage. 
+     
+A slight variation for the model fit assessment is that for the *RSE*:  
+- $RSE = \sqrt{\frac{1}{n-p-1}RSS}$
+
+```{r ed scatter plot Ad}
+plotly::plot_ly(data = df_model_tv,
+                x = ~TV,
+                y = ~radio,
+                z = ~sales,
+                type = "scatter3d", 
+                mode = "markers",
+                color = '#7D6B7D') 
+
+```
+
+
+There are two assumptions that are strict but can be relaxed:  
+
+- *Additive*, that means that the association between $X_i$ and $Y$ does not depend on the value of the **other predictors**. 
+     - We can add *interaction effects* or *synergies*
+     - Then a parameter is no longer constant and is a function of another parameter.  
+     - $Y = \beta_0 + \beta_1X_1 + \beta_2X_2 + \beta_3X_2X_3 + \epsilon$
+     - The **hierarchical principle** states that if we include an *interaction effects* we should also include the *main effects*.
+     - The *interaction effects* change the slope for categorical variables ;)
+- *Linearity*  
+     - to accomodate non-linear relationships we can run a **polynomial regression**  
+     - $Y = \beta_0 + \beta_1X_1 + \beta_2X_2 + \beta_3X_2^2 + \epsilon$
+
+
+## Potential Problems  
+
+1. *Non linearity of the response-predictor relationship*  
+2. *Correlation of error terms* (for times series) 
+3. *Non constant variance of error terms*  
+4. *Outliers and high leverage values*  
+5. *Collinearity*
+
+
+### Non-linearity of Data
+
+If there is not even a pseudo-linear relationship among a predictor/s and the response variable, then the world famous "*Residual plots*" will tell us.
+
+For this case we will show the `Auto` dataset:  
+
+```{r load Auto}
+auto <- fread(file = file.path('data', 'Auto.csv'))
+
+head(auto)
+str(auto)
+
+## horsepower is not numeric
+auto[, horsepower := as.numeric(horsepower)]
+auto = auto[!is.na(horsepower)]
+
+summary(auto)
+
+```
+
+
+```{r fit Auto models}
+
+model_auto_linear <- lm(mpg ~ horsepower, data = auto)
+model_auto_quad <- lm(mpg ~ horsepower + poly(horsepower, 2), data = auto)
+model_auto_vr <- lm(log(mpg) ~ horsepower + poly(horsepower, 2), data = auto)
+
+
+df_model_auto = auto
+
+df_model_auto[, predicted_linear := predict(model_auto_linear)]
+df_model_auto[, predicted_quad := predict(model_auto_quad)]
+df_model_auto[, predicted_vr := predict(model_auto_vr)]
+
+df_model_auto[, residuals_linear := model_auto_linear$residuals]
+df_model_auto[, residuals_quad := model_auto_quad$residuals]
+df_model_auto[, residuals_vr:= model_auto_vr$residuals]
+
+
+```
+
+
+```{r linear graph Auto, out.width='100%'}
+
+model_lin <-
+ggplot(df_model_auto, 
+       aes(x = horsepower,
+           y = mpg)) + 
+  geom_point(col = "#7D6B7D", alpha = 0.5, size = 3) +
+  geom_line(aes(y = predicted_linear), colour = '#DEA800', size = 2) +      
+     labs(title = latex2exp::TeX(r"($mpg ~ \beta_0 horsepower$)")) 
+
+resid_lin <-
+ggplot(df_model_auto, 
+       aes(x = predicted_linear,
+           y = residuals_linear)) + 
+  geom_point(col = "#A8C0CE", alpha = 0.5, size = 3) +
+     labs(title = 'Linear Horseporwer Residuals')
+
+grid.arrange(model_lin, resid_lin, ncol = 2)
+
+```
+
+```{r quad graph Auto, out.width='100%'}
+
+model_quad <-
+ggplot(df_model_auto, 
+       aes(x = horsepower,
+           y = mpg)) + 
+  geom_point(col = "#7D6B7D", alpha = 0.5, size = 3) +
+  geom_line(aes(y = predicted_quad), colour = '#DEA800', size = 2) +      
+     labs(title = latex2exp::TeX(r"($mpg ~ \beta_0 horsepower + \beta_1 horsepower^2$)")) 
+
+resid_quad <-
+ggplot(df_model_auto, 
+       aes(x = predicted_quad,
+           y = residuals_quad)) + 
+  geom_point(col = "#A8C0CE", alpha = 0.5, size = 3) +
+     labs(title = 'Linear + Quadratic Horseporwer Residuals')
+
+grid.arrange(model_quad, resid_quad, ncol = 2)
+
+```
+
+As we can observe from the plots, when there was not a second order variable the model was not that bad, but with the *residuals plot* we identified clearly that a **quadratic** term was not captured. In the second model instead it is hard to identify any visible pattern.
+
+## Non-constant Variance of Error Terms  
+
+If we recall that in our model we specify an error term $\epsilon_i$ that follows a **Gaussian distribution**, if their *Variance* is not constant then a very important assumption is violated and coefficient estimation will be misguided. 
+
+The measures to be taken to attend this issue depend on *how* Variance is not constant. The most common ones are **transforming the response variable $Y$**, for instance $ln(Y), \sqrt{Y}$.  
+
+Recalling the `model_auto_quad` *residuals plot*, if we fit a new model with a $log$ transformation we will see how the increscendo pattern dissapears. 
+
+```{r vr graph Auto, out.width='100%'}
+model_vr <-
+ggplot(df_model_auto, 
+       aes(x = horsepower,
+           y = log(mpg))) + 
+  geom_point(col = "#7D6B7D", alpha = 0.5, size = 3) +
+  geom_line(aes(y = predicted_vr), colour = '#DEA800', size = 2) +      
+     labs(title = latex2exp::TeX(r"($log(mpg) ~ \beta_0 horsepower$)")) 
+
+resid_vr <-
+ggplot(df_model_auto, 
+       aes(x = predicted_vr,
+           y = residuals_vr)) + 
+  geom_point(col = "#A8C0CE", alpha = 0.5, size = 3) +
+     labs(title = 'Log transformed + QUadratic term Horseporwer Residuals')
+
+grid.arrange(model_vr, resid_vr, ncol = 2)
+```
+
+Another technique that is useful in some datasets is fitting the model through *weighted least squares*, specially on small to medium size datasets.  
+
+### Outliers and High Leverage Values 
+
+While *outliers* per se may contain useful information, such as extreme events, special cases to consider, data anomalies in collection, among others, and hence treating them carefully; *high leverage values* are not taken that serious taking into account how strong they can affect our model **even if they are legitimate values**. 
+
+Both can affect the model importantly as many algorithms use the *mean* and *variance* for estimation, and we all know that this stats are sensitive to extreme values.  
+
+As always, plots may be useful to identify these values, but as we are talking of single values and not patterns it is harder to know at plain sight **the difference between acceptable rare or extreme**. Numeric approaches instead are:  
+- For *outliers*: $studentized residuals = \frac{\epsilon_i}{SE(\epsilon_i)}$
+     - for values greater than 3 we can consider them as outliers.
+     - we remove **extreme $Y$ values**.  
+- For *high leverage values*: $leveragestatistic = h_{i} =\frac{1}{n}+\frac{\left(x_{i}-\bar{x}\right)^{2}}{\sum_{i^{\prime}=1}^{n}\left(x_{i}-\bar{x}\right)^{2}}$
+     - The leverage statistic h i is always between $1/n$ and 1, and the average leverage for all the observations is always equal to $(p + 1)/n$. So if a given observation has a leverage statistic that greatly exceeds $(p+1)/n$, then we may suspect that the corresponding point has **high leverage**.
+     - we remove **extreme $X$ values**.
+     
+     
+     
+```{r outliers residuals}
+
+df_model_auto[, stud_res := MASS::studres(model_auto_vr)]
+df_model_auto[, stud_res_pos := fifelse(stud_res >= 3 | stud_res <= -3, 'outlier', 'ok')]
+
+
+studres_vr <-
+ggplot(df_model_auto, 
+       aes(x = horsepower,
+           y = stud_res,
+           color = stud_res_pos)) + 
+  geom_point(alpha = 0.5, size = 3) +
+   geom_line(aes(y = 0, alpha = 1, size = 2), colour = '#FF665A') +      
+   geom_line(aes(y = 3, alpha = 0.75, size = 4), colour = '#FF665A') +      
+   geom_line(aes(y = -3, alpha = 0.75, size = 4), colour = '#FF665A') +      
+
+     labs(title = latex2exp::TeX(r"($log(mpg) ~ \beta_0 horsepower- Studentized Residuals$)")) + 
+     xlab('horsepower') + ylab('Studentized Residuals')
+
+
+```
+
+
+We will remove the values identified as outliers and high leverage and compare the $R^2$ for all models:  
+
+```{r compare models}
+
+### No Outliers
+df_model_auto_out = df_model_auto[stud_res_pos == 'ok']
+model_auto_vr_out <- lm(log(mpg) ~ horsepower + poly(horsepower, 2), data = df_model_auto_out)
+
+
+sm_lin = summary(model_auto_linear)$adj.r.squared
+sm_quad = summary(model_auto_quad)$adj.r.squared
+sm_vr = summary(model_auto_vr)$adj.r.squared
+sm_vr_out = summary(model_auto_vr_out)$adj.r.squared
+
+data.table(linear = sm_lin,
+           quadratic = sm_quad,
+           var_constant = sm_vr,
+           no_outliers = sm_vr_out)
+
+```
+
+#### Identify HLV
+```{r hlv}
+### Artificially add a HLV
+hlv = df_model_auto[1]
+hlv$horsepower <- 350
+
+df_model_auto_hlv = rbind(df_model_auto, hlv)
+
+model_auto_vr_out_hlv <- lm(log(mpg) ~ horsepower + poly(horsepower, 2), data = df_model_auto_hlv)
+
+hats <- data.frame(hlv = hatvalues(model_auto_vr_out_hlv),
+                   x = 1:nrow(df_model_auto_hlv))
+
+ggplot(hats,
+       aes(x = x,
+           y = hlv)) + 
+     geom_col(fill = '#6593A6', color = '#6593A6', alpha = 0.5)
+
+```
+
+#### Assess Residuals Normality
+
+```{r resid normality}
+
+resid = data.frame(residuals = model_auto_vr_out$residuals)
+
+#create Q-Q plot for residuals
+ggplot(resid,
+       aes(sample = residuals)) + 
+     stat_qq(color = '#99BFB3', alpha = 0.5, size = 5) + 
+     stat_qq_line(color = '#6593A6', size = 2) +
+          xlab('theoretical quantiles') + 
+          ylab('sample')
+
+# create residuals histogram
+ggplot(resid,
+       aes(x = residuals)) + 
+     geom_histogram(color = '#C3B2AF', fill = '#C3B2AF', alpha = 0.8) + 
+          xlab('residuals') + ylab('') 
+     
+
+```
